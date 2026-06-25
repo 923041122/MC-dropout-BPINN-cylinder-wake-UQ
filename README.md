@@ -1,10 +1,10 @@
 # MC-dropout B-PINN for Physics-Constrained Flow Reconstruction and Uncertainty Quantification
 
-This repository contains the code and processed data used in the manuscript:
+This repository contains the code and processed validation data used in the manuscript:
 
 **Uncertainty Quantification for Physics-Constrained Reconstruction of a High-Reynolds-Number Cylinder Wake Using an MC-Dropout Physics-Informed Neural Network**
 
-The repository provides implementations for physics-constrained flow-field reconstruction and uncertainty quantification using an MC-dropout Bayesian physics-informed neural network (MC-dropout B-PINN). Two separated-flow cases are included:
+The repository provides implementations for physics-constrained flow-field reconstruction and uncertainty quantification using an MC-dropout Bayesian physics-informed neural network (MC-dropout B-PINN). Two separated-flow cases are considered:
 
 1. A two-dimensional high-Reynolds-number cylinder wake at $Re = 3900$
 2. A two-dimensional NASA wall-mounted hump separated-flow case
@@ -21,8 +21,6 @@ MC-dropout-BPINN-cylinder-wake-UQ/
 ├── requirements.txt
 ├── LICENSE
 ├── cylinder_wake/
-│   ├── data/
-│   │   └── 2d_cylinder_Re3900_100x100_kw_sst.mat
 │   ├── bayesian_uncertainty_plot.py
 │   ├── benchmark_config.py
 │   ├── benchmark_evaluate.py
@@ -33,9 +31,7 @@ MC-dropout-BPINN-cylinder-wake-UQ/
 │   ├── plot_dimensionless.py
 │   ├── read_data.py
 │   ├── train_uv_modify.py
-│   ├── uncertainty_ablation.py
-│   ├── train_all_300.txt
-│   └── train_bpinn_finetune.txt
+│   └── uncertainty_ablation.py
 └── nasa_hump/
     ├── benchmark_tools.py
     ├── hump_train.py
@@ -54,11 +50,15 @@ MC-dropout-BPINN-cylinder-wake-UQ/
 
 ### 1. Cylinder-wake case
 
-The `cylinder_wake/` folder contains the implementation for the two-dimensional cylinder-wake reconstruction case at (Re = 3900). The processed reference field is provided in:
+The `cylinder_wake/` folder contains the implementation for the two-dimensional cylinder-wake reconstruction case at $Re = 3900$.
 
-```text
-cylinder_wake/data/2d_cylinder_Re3900_100x100_kw_sst.mat
-```
+The cylinder-wake reference data used in this study were obtained from the publicly available GitHub repository:
+
+https://github.com/Shengfeng233/PINN-for-turbulence
+
+The original repository provides the two-dimensional circular-cylinder wake dataset calculated using a $k$-$\omega$ SST model at $Re = 3900$. Users should obtain the original cylinder-wake data from the source repository and cite the original repository and associated references when using the data.
+
+Due to redistribution and attribution considerations, the original cylinder-wake `.mat` data file is not redistributed in this repository. The present repository provides the scripts used for physics-constrained reconstruction, uncertainty estimation, calibration analysis, and post-processing.
 
 Main files:
 
@@ -99,7 +99,13 @@ Main files:
 
 ### 2. NASA wall-mounted hump case
 
-The `nasa_hump/` folder contains the implementation and processed reference data for the two-dimensional NASA wall-mounted hump case.
+The `nasa_hump/` folder contains the implementation and processed reference data for the two-dimensional NASA wall-mounted hump separated-flow case.
+
+The NASA wall-mounted hump validation data were obtained from the NASA Turbulence Modeling Resource:
+
+https://tmbwg.github.io/turbmodels/nasahump_val.html
+
+Users should cite the NASA Turbulence Modeling Resource and the associated experimental references when using these data.
 
 Main files:
 
@@ -158,18 +164,6 @@ Install the required packages with:
 pip install -r requirements.txt
 ```
 
-A simple `requirements.txt` file may contain:
-
-```text
-numpy
-scipy
-matplotlib
-pandas
-torch
-scikit-learn
-tqdm
-```
-
 ---
 
 ## Usage
@@ -192,27 +186,31 @@ python nasa_hump/hump_validation.py
 
 Depending on the local environment, file paths in the scripts may need to be adjusted to match the repository directory structure.
 
+For the cylinder-wake case, users should first obtain the original `.mat` data file from:
+
+https://github.com/Shengfeng233/PINN-for-turbulence
+
+and place it in the local data path expected by the corresponding scripts.
+
 ---
 
 ## Data
 
 ### Cylinder-wake data
 
-The processed two-dimensional cylinder-wake reference field is provided in:
+The cylinder-wake reference data are not redistributed in this repository. The data were obtained from the following publicly available source repository:
 
-```text
-cylinder_wake/data/2d_cylinder_Re3900_100x100_kw_sst.mat
-```
+https://github.com/Shengfeng233/PINN-for-turbulence
 
-This file contains the processed reference field used for supervised reconstruction and evaluation in the cylinder-wake case.
+Users should obtain the data from the original source and cite the original repository and associated references.
 
 ### NASA wall-mounted hump data
 
-The processed LES and experimental reference data for the NASA wall-mounted hump case are provided in:
+The processed LES and experimental reference data for the NASA wall-mounted hump case are provided in the `nasa_hump/` folder.
 
-```text
-nasa_hump/
-```
+The original validation data source is the NASA Turbulence Modeling Resource:
+
+https://tmbwg.github.io/turbmodels/nasahump_val.html
 
 These data are used for wall-pressure coefficient comparison and velocity-profile validation.
 
@@ -246,7 +244,17 @@ The same network size is used for the deterministic PINN baselines and the MC-dr
 
 The implementation used for the MC-dropout B-PINN, deterministic PINN baselines, uncertainty-calibration metrics, and plotting scripts is publicly available in this repository.
 
-The processed cylinder-wake CFD reference field and the processed NASA wall-mounted hump reference data used for validation are also provided in this repository.
+The cylinder-wake reference data were obtained from the publicly available GitHub repository:
+
+https://github.com/Shengfeng233/PINN-for-turbulence
+
+Due to redistribution and attribution considerations, the original cylinder-wake `.mat` data file is not redistributed in this repository and should be accessed from the original source.
+
+The NASA wall-mounted hump validation data were obtained from the NASA Turbulence Modeling Resource:
+
+https://tmbwg.github.io/turbmodels/nasahump_val.html
+
+The processed NASA wall-mounted hump data used for validation are provided in the `nasa_hump/` folder.
 
 ---
 
@@ -259,8 +267,11 @@ Zhu, L. and Zhang, X.,
 Uncertainty Quantification for Physics-Constrained Reconstruction of a High-Reynolds-Number Cylinder Wake Using an MC-Dropout Physics-Informed Neural Network.
 ```
 
+Please also cite the original data sources when using the cylinder-wake dataset or the NASA wall-mounted hump validation data.
+
 ---
 
 ## License
 
 This repository is released under the MIT License.
+
