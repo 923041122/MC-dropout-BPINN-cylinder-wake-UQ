@@ -92,7 +92,7 @@ HUMP_METHODS = {
         "checkpoint_name": "adaptive_weight_pinn.pth",
     },
     "bpinn_dropout": {
-        "label": "B-PINN",
+        "label": "MC-dropout B-PINN",
         "model_type": "psi",
         "dropout_rate": 0.002,
         "weight_decay": 0.0,
