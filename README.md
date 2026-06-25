@@ -6,7 +6,7 @@ This repository contains the code and processed data used in the manuscript:
 
 The repository provides implementations for physics-constrained flow-field reconstruction and uncertainty quantification using an MC-dropout Bayesian physics-informed neural network (MC-dropout B-PINN). Two separated-flow cases are included:
 
-1. A two-dimensional high-Reynolds-number cylinder wake at Re = 3900
+1. A two-dimensional high-Reynolds-number cylinder wake at $Re = 3900$
 2. A two-dimensional NASA wall-mounted hump separated-flow case
 
 The code includes deterministic PINN baselines, MC-dropout uncertainty estimation, calibration analysis, error evaluation, and plotting scripts.
@@ -233,8 +233,8 @@ The main training settings follow those reported in the manuscript, including:
 * Network size: 10 hidden layers with 100 neurons per layer
 * Activation function: hyperbolic tangent
 * Optimizer: Adam
-* Data-loss weight: \lambda_d = 10
-* Physics-loss weight: \lambda_f = 1
+* Data-loss weight: $\lambda_d = 10$
+* Physics-loss weight: $\lambda_f = 1$
 * Dropout rate for MC-dropout B-PINN: 0.002
 * Number of Monte Carlo samples for uncertainty evaluation: 50
 
