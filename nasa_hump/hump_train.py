@@ -19,7 +19,7 @@ Network form is kept consistent with your cylinder-flow scripts:
 NASA hump data used by this trainer:
     LES_meanfield_nasahump2009_tec.dat     -> supervised u, v mean field
     LES_cp_nasahump2009.dat                -> optional wall Cp supervision for p
-    noflow_cp.exp.dat                      -> optional experimental wall Cp supervision
+    noflow_cp_exp.dat                      -> optional experimental wall Cp supervision
 
 Default output:
     ./hump_results/models/standard_pinn.pth
@@ -29,13 +29,13 @@ Default output:
     ./hump_results/training_logs/*.csv
 
 Quick test:
-    python hump_train.py --data-dir ./hump_data --method standard_pinn --epochs 5 --n-equation-points 2000
+    python hump_train.py --data-dir ./nasa_hump --method standard_pinn --epochs 5 --n-equation-points 2000
 
 Formal run:
-    python hump_train.py --data-dir ./hump_data --method all --epochs 2000 --n-equation-points 50000
+    python hump_train.py --data-dir ./nasa_hump --method all --epochs 2000 --n-equation-points 10000
 
 After training:
-    python hump_validation.py --data-dir ./hump_data --models-root ./hump_results/models --results-root ./hump_results
+    python hump_validation.py --data-dir ./nasa_hump --models-root ./hump_results/models --results-root ./hump_results
 """
 
 from __future__ import annotations
@@ -357,7 +357,7 @@ def build_cp_supervision(
             frames.append(tmp)
 
     if cp_source in {"exp", "both"}:
-        path = data_dir / "noflow_cp.exp.dat"
+        path = data_dir / "noflow_cp_exp.dat"
 
         if path.exists():
             tmp = read_cp_file(path)
@@ -1008,8 +1008,8 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--data-dir",
-        default="./hump_data",
-        help="Directory containing NASA hump .dat files.",
+        default=str(Path(__file__).resolve().parent),
+        help="Directory containing the NASA hump .dat files (defaults to this script folder).",
     )
 
     parser.add_argument(
@@ -1069,8 +1069,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--n-equation-points",
         type=int,
-        default=50000,
-        help="Number of steady NS collocation points.",
+        default=10000,
+        help="Number of steady NS collocation points; manuscript setting: 10,000.",
     )
 
     parser.add_argument(
@@ -1111,10 +1111,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--equation-loss-weight",
         type=float,
-        default=1e-4,
+        default=1e-5,
         help=(
-            "Weight for steady NS residual. Default is small because the NASA hump "
-            "reference is a turbulent LES mean field, not a laminar DNS snapshot."
+            "Weight for the steady two-dimensional momentum residual; "
+            "manuscript setting: 1e-5."
         ),
     )
 

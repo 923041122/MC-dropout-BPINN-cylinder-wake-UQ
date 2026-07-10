@@ -21,12 +21,12 @@ Place this file in the same project folder as:
     benchmark_tools.py
 
 Expected data files by default:
-    ./hump_data/LES_meanfield_nasahump2009_tec.dat
-    ./hump_data/LES_statistics_profiles_nasahump2009.dat
-    ./hump_data/LES_cp_nasahump2009.dat
-    ./hump_data/noflow_cp.exp.dat
-    ./hump_data/noflow_cf.exp.dat
-    ./hump_data/noflow_vel_and_turb.exp.dat
+    ./nasa_hump/LES_meanfield_nasahump2009_tec.dat
+    ./nasa_hump/LES_statistics_profiles_nasahump2009.dat
+    ./nasa_hump/LES_cp_nasahump2009.dat
+    ./nasa_hump/noflow_cp_exp.dat
+    ./nasa_hump/noflow_cf_exp.dat
+    ./nasa_hump/noflow_vel_and_turb_exp.dat
 
 Expected model checkpoints by default:
     ./hump_results/models/standard_pinn.pth
@@ -35,7 +35,7 @@ Expected model checkpoints by default:
     ./hump_results/models/bpinn_dropout.pth
 
 Example:
-    python hump_validation.py --data-dir ./hump_data --models-root ./hump_results/models
+    python hump_validation.py --data-dir ./nasa_hump --models-root ./hump_results/models
 
 If checkpoints are not found, the script skips model-dependent parts and still writes
 reference/experimental plots. Use --require-models if missing checkpoints should be fatal.
@@ -154,9 +154,9 @@ def read_numeric_rows(path: Path, min_cols: int = 1) -> pd.DataFrame:
     """Read loose Tecplot-like ASCII files by keeping only numeric rows.
 
     This works for files such as:
-        noflow_cp.exp.dat
-        noflow_cf.exp.dat
-        noflow_vel_and_turb.exp.dat
+        noflow_cp_exp.dat
+        noflow_cf_exp.dat
+        noflow_vel_and_turb_exp.dat
         LES_cp_nasahump2009.dat
     """
     rows: List[List[float]] = []
@@ -374,7 +374,7 @@ def read_les_profiles(path: Path) -> pd.DataFrame:
 
 
 def read_exp_profiles(path: Path) -> pd.DataFrame:
-    """Read noflow_vel_and_turb.exp.dat.
+    """Read noflow_vel_and_turb_exp.dat.
 
     Output columns:
         x, y, u, v, uu, vv, uv
@@ -402,9 +402,9 @@ def load_hump_data(data_dir: Path) -> Dict[str, object]:
         "meanfield": read_les_meanfield_tec(data_dir / "LES_meanfield_nasahump2009_tec.dat"),
         "les_profiles": read_les_profiles(data_dir / "LES_statistics_profiles_nasahump2009.dat"),
         "les_cp": read_cp_file(data_dir / "LES_cp_nasahump2009.dat"),
-        "exp_cp": read_cp_file(data_dir / "noflow_cp.exp.dat"),
-        "exp_cf": read_cf_exp(data_dir / "noflow_cf.exp.dat"),
-        "exp_profiles": read_exp_profiles(data_dir / "noflow_vel_and_turb.exp.dat"),
+        "exp_cp": read_cp_file(data_dir / "noflow_cp_exp.dat"),
+        "exp_cf": read_cf_exp(data_dir / "noflow_cf_exp.dat"),
+        "exp_profiles": read_exp_profiles(data_dir / "noflow_vel_and_turb_exp.dat"),
     }
     return data
 
@@ -1344,27 +1344,33 @@ def run_hump_uq_ablation(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NASA hump validation for B-PINN/PINN baselines.")
 
-    parser.add_argument("--data-dir", type=str, default="./hump_data", help="Directory containing NASA hump .dat files.")
+    parser.add_argument(
+        "--data-dir", type=str, default=str(Path(__file__).resolve().parent),
+        help="Directory containing NASA hump .dat files (defaults to this script folder)."
+    )
     parser.add_argument("--results-root", type=str, default="./hump_results", help="Root directory for all outputs.")
     parser.add_argument("--models-root", type=str, default="./hump_results/models", help="Directory containing trained hump checkpoints.")
     parser.add_argument("--logs-root", type=str, default="./hump_results/training_logs", help="Optional training-log directory.")
 
     parser.add_argument("--methods", nargs="+", default=ACTIVE_HUMP_METHODS, help="Methods to evaluate.")
     parser.add_argument("--batch-size", type=int, default=20000, help="Inference batch size.")
-    parser.add_argument("--mc-samples", type=int, default=30, help="MC-dropout samples for B-PINN UQ.")
+    parser.add_argument("--mc-samples", type=int, default=50, help="MC-dropout samples for B-PINN UQ; manuscript setting: 50.")
     parser.add_argument("--skip-uq", action="store_true", help="Skip B-PINN uncertainty calibration.")
     parser.add_argument("--require-models", action="store_true", help="Raise an error if any requested checkpoint is missing.")
 
     parser.add_argument(
         "--pressure-to-cp-scale",
         type=float,
-        default=1.0,
-        help="Scale used to convert model pressure output to Cp. Use 2.0 if p is nondimensionalized by rho*U^2.",
+        default=2.0,
+        help="Scale used to convert model pressure output to Cp; manuscript setting: Cp = 2p.",
     )
     parser.add_argument(
-        "--no-align-cp-offset",
+        "--align-cp-offset",
         action="store_true",
-        help="Disable constant offset alignment when comparing predicted pressure/Cp with LES Cp.",
+        help=(
+            "Optionally fit a constant Cp offset to the LES curve. Disabled by default "
+            "and not used for the manuscript results."
+        ),
     )
 
     parser.add_argument("--run-ablation", action="store_true", help="Run B-PINN dropout-rate/MC-sample ablation.")
@@ -1454,7 +1460,7 @@ def main() -> None:
         device=device,
         batch_size=args.batch_size,
         pressure_to_cp_scale=args.pressure_to_cp_scale,
-        align_cp_offset=not args.no_align_cp_offset,
+        align_cp_offset=args.align_cp_offset,
         save_dir=tables_root / "cp",
     )
     if not cp_metrics_df.empty:
@@ -1525,7 +1531,7 @@ def main() -> None:
                         batch_size=args.batch_size,
                     )
                     cp_samples = args.pressure_to_cp_scale * cp_stats["p"]["samples"]
-                    if not args.no_align_cp_offset:
+                    if args.align_cp_offset:
                         cp_mean = cp_samples.mean(axis=0)
                         offset = float(np.nanmean(les_window["cp"].values - cp_mean))
                         cp_samples = cp_samples + offset
