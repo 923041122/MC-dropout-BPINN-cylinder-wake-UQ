@@ -20,6 +20,7 @@ DATA_PATH = Path("./2d_cylinder_Re3900_100x100_kw_sst.mat")
 
 RESULT_ROOT = Path("./benchmark_results")
 MODEL_ROOT = RESULT_ROOT / "models"
+DROPOUT_ABLATION_MODEL_ROOT = MODEL_ROOT / "dropout_ablation"
 EVAL_ROOT = RESULT_ROOT / "evaluation"
 
 # Psi-p network:
@@ -112,8 +113,13 @@ DEFAULT_TRAINING = {
     "learning_rate": 1e-3,
     "decay_rate": 0.9,
 
-    # Supervised data ratio.
-    "ratio": 0.02,
+    # Fraction of the full labelled cylinder dataset retained for supervised training.
+    # This is the manuscript's supervised sampling ratio.
+    "supervised_ratio": 0.02,
+
+    # Mini-batch fraction applied after the fixed supervised subset is selected.
+    # It controls memory use only and is not the supervised sampling ratio.
+    "batch_fraction": 0.02,
 
     # PDE collocation points.
     "n_equation_points": 100_000,
@@ -138,9 +144,9 @@ DEFAULT_EVAL = {
     # the formal setting uses mc_samples >= 50.
     "interval_levels": [0.50, 0.60, 0.70, 0.80, 0.90, 0.95, 0.99],
 
-    # Dropout-rate ablation.
-    # These values are used for inference-time dropout sensitivity unless
-    # separate checkpoints are trained for each dropout rate.
+    # Formal retraining-based cylinder-wake dropout-rate ablation.
+    # uncertainty_ablation.py requires one independently trained checkpoint
+    # for every value listed here.
     "dropout_rates": [0.002, 0.005, 0.01, 0.02, 0.05],
 
     # MC-sample-number ablation.

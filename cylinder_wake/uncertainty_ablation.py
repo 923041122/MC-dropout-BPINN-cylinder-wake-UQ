@@ -1,7 +1,9 @@
 """Dropout-rate and Monte-Carlo-sample ablation for B-PINN uncertainty.
 
 This script evaluates how dropout rate and the number of MC samples affect
-uncertainty calibration for B-PINN / MC-dropout.
+uncertainty calibration for B-PINN / MC-dropout. It requires one independently
+trained checkpoint per dropout rate and therefore implements a formal
+retraining-based ablation, not inference-time probability substitution.
 
 Main outputs:
     1. dropout_mc_ablation.csv
@@ -29,7 +31,15 @@ import numpy as np
 import pandas as pd
 import torch
 
-from benchmark_config import DEFAULT_EVAL, EVAL_ROOT, LAYER_MAT_PSI, METHODS
+from pathlib import Path
+
+from benchmark_config import (
+    DEFAULT_EVAL,
+    DROPOUT_ABLATION_MODEL_ROOT,
+    EVAL_ROOT,
+    LAYER_MAT_PSI,
+    METHODS,
+)
 from benchmark_evaluate import load_data_stack, prepare_snapshot
 from benchmark_tools import build_model, get_device, predict_uvp_numpy, safe_load_state
 
@@ -46,9 +56,13 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--checkpoint",
-        default=str(METHODS["bpinn_dropout"]["checkpoint"]),
-        help="Checkpoint path of the trained B-PINN / MC-dropout model.",
+        "--checkpoint-dir",
+        type=Path,
+        default=DROPOUT_ABLATION_MODEL_ROOT,
+        help=(
+            "Directory containing independently trained checkpoints named "
+            "bpinn_dropout_dr_<rate>.pth."
+        ),
     )
 
     parser.add_argument(
@@ -80,6 +94,13 @@ def parse_args():
         type=int,
         default=DEFAULT_EVAL["batch_size"],
         help="Batch size used during full-field inference.",
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=2025,
+        help="Random seed used for reproducible stochastic inference.",
     )
 
     return parser.parse_args()
@@ -393,8 +414,22 @@ def save_summary_table(df, save_dir):
     return summary_path
 
 
+
+def rate_tag(rate):
+    return f"{float(rate):.6f}".rstrip("0").rstrip(".").replace(".", "p")
+
+
+def checkpoint_for_rate(checkpoint_dir, rate):
+    return Path(checkpoint_dir) / f"bpinn_dropout_dr_{rate_tag(rate)}.pth"
+
+
 def main():
     args = parse_args()
+
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     device = get_device()
     data_stack = load_data_stack(args.data_path)
@@ -405,16 +440,19 @@ def main():
     rows = []
 
     for dropout_rate in args.dropout_rates:
+        checkpoint = checkpoint_for_rate(args.checkpoint_dir, dropout_rate)
+        if not checkpoint.exists():
+            raise FileNotFoundError(
+                f"Missing independently trained checkpoint for dropout={dropout_rate}: {checkpoint}. "
+                "Run train_dropout_ablation.py first."
+            )
+
         cfg = dict(METHODS["bpinn_dropout"])
-        cfg["dropout_rate"] = dropout_rate
+        cfg["dropout_rate"] = float(dropout_rate)
+        cfg["checkpoint"] = checkpoint
 
         model = build_model(cfg, LAYER_MAT_PSI).to(device)
-
-        model.load_state_dict(
-            safe_load_state(args.checkpoint, device),
-            strict=False,
-        )
-
+        model.load_state_dict(safe_load_state(checkpoint, device), strict=True)
         model.eval()
 
         for mc_samples in args.mc_samples:
@@ -449,6 +487,11 @@ def main():
                             "time_value": float(select_time),
                             "nominal_coverage": 0.95,
                             "interval_method": "mc_quantile",
+                            "ablation_type": "independent_retraining",
+                            "training_dropout_rate": float(dropout_rate),
+                            "inference_dropout_rate": float(dropout_rate),
+                            "checkpoint": str(checkpoint),
+                            "random_seed": int(args.seed),
                         }
                     )
 

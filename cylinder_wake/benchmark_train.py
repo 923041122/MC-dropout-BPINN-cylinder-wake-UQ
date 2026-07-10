@@ -2,12 +2,14 @@
 
 import argparse
 import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 
 from benchmark_config import (
+    ACTIVE_METHODS,
     DATA_PATH,
     DEFAULT_TRAINING,
     LAYER_MAT_PSI,
@@ -46,10 +48,30 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--ratio",
+        "--data-path",
+        type=str,
+        default=str(DATA_PATH),
+        help="Path to the Re=3900 cylinder-flow .mat file.",
+    )
+
+    parser.add_argument(
+        "--supervised-ratio",
         type=float,
-        default=DEFAULT_TRAINING["ratio"],
-        help="Mini-batch sampling ratio used for data points and equation points.",
+        default=DEFAULT_TRAINING["supervised_ratio"],
+        help=(
+            "Fraction of all labelled cylinder samples retained as the fixed "
+            "supervised subset. The manuscript value is 0.02."
+        ),
+    )
+
+    parser.add_argument(
+        "--batch-fraction",
+        type=float,
+        default=DEFAULT_TRAINING["batch_fraction"],
+        help=(
+            "Mini-batch fraction applied after the supervised subset is selected. "
+            "This controls memory use and is not the supervised sampling ratio."
+        ),
     )
 
     parser.add_argument(
@@ -104,6 +126,30 @@ def parse_args():
         "--resume",
         action="store_true",
         help="Resume training from an existing checkpoint if available.",
+    )
+
+    parser.add_argument(
+        "--dropout-rate",
+        type=float,
+        default=None,
+        help=(
+            "Optional dropout-rate override for --method bpinn_dropout. "
+            "Used by the formal retraining-based ablation workflow."
+        ),
+    )
+
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Optional checkpoint path override. Use only when training one method.",
+    )
+
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="Optional unique name for checkpoint metadata and training CSV files.",
     )
 
     return parser.parse_args()
@@ -327,9 +373,18 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
 
     set_seed(args.seed)
 
+    cfg = dict(cfg)
+    if args.dropout_rate is not None:
+        if method_name != "bpinn_dropout":
+            raise ValueError("--dropout-rate can only be used with --method bpinn_dropout")
+        if not (0.0 < args.dropout_rate < 1.0):
+            raise ValueError("--dropout-rate must be between 0 and 1")
+        cfg["dropout_rate"] = float(args.dropout_rate)
+
     model = build_model(cfg, LAYER_MAT_PSI).to(device)
-    checkpoint = cfg["checkpoint"]
+    checkpoint = Path(args.checkpoint) if args.checkpoint else Path(cfg["checkpoint"])
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    run_name = args.run_name or method_name
 
     load_checkpoint_if_needed(model, checkpoint, device, args.resume)
 
@@ -361,8 +416,8 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
         warmup_steps=DEFAULT_TRAINING["warmup_steps"],
     )
 
-    batch_size_data = max(1, int(args.ratio * x_random.shape[0]))
-    batch_size_eqa = max(1, int(args.ratio * eqa_points.shape[0]))
+    batch_size_data = max(1, int(args.batch_fraction * x_random.shape[0]))
+    batch_size_eqa = max(1, int(args.batch_fraction * eqa_points.shape[0]))
 
     inner_iter = int(np.ceil(x_random.size(0) / batch_size_data))
 
@@ -555,7 +610,7 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
         # Keep saving model.state_dict() to remain compatible with your evaluation code.
         torch.save(model.state_dict(), checkpoint)
 
-        log_path = metrics_dir / f"{method_name}_training_log.csv"
+        log_path = metrics_dir / f"{run_name}_training_log.csv"
         pd.DataFrame(rows).to_csv(log_path, index=False)
 
         print(
@@ -586,15 +641,16 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
 
     total_training_time = time.perf_counter() - start_time
 
-    final_log_path = metrics_dir / f"{method_name}_training_log.csv"
+    final_log_path = metrics_dir / f"{run_name}_training_log.csv"
     pd.DataFrame(rows).to_csv(final_log_path, index=False)
 
-    summary_path = metrics_dir / f"{method_name}_training_summary.csv"
+    summary_path = metrics_dir / f"{run_name}_training_summary.csv"
 
     summary = pd.DataFrame(
         [
             {
                 "method": method_name,
+                "run_name": run_name,
                 "label": cfg.get("label", method_name),
                 "checkpoint": str(checkpoint),
                 "epochs": args.epochs,
@@ -611,6 +667,11 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
                 "weight_decay": cfg.get("weight_decay", 0.0),
                 "adaptive_loss": cfg.get("adaptive_loss", False),
                 "model_type": cfg.get("model_type", "psi"),
+                "supervised_ratio": float(args.supervised_ratio),
+                "supervised_points": int(x_random.shape[0]),
+                "collocation_points": int(eqa_points.shape[0]),
+                "batch_fraction": float(args.batch_fraction),
+                "random_seed": int(args.seed),
             }
         ]
     )
@@ -625,13 +686,24 @@ def train_method(method_name, cfg, args, x_random, eqa_points, device):
 
 
 def prepare_training_data(args):
-    x, y, t, u, v, p, feature_mat = read_2D_data(str(DATA_PATH))
+    if not (0.0 < args.supervised_ratio <= 1.0):
+        raise ValueError("--supervised-ratio must be in (0, 1]")
+    if not (0.0 < args.batch_fraction <= 1.0):
+        raise ValueError("--batch-fraction must be in (0, 1]")
 
-    x_random = shuffle_data(x, y, t, u, v, p)
+    x, y, t, u, v, p, feature_mat = read_2D_data(str(args.data_path))
+    all_supervised = shuffle_data(x, y, t, u, v, p)
+    total_supervised_points = int(all_supervised.shape[0])
+    retained_points = max(1, int(round(args.supervised_ratio * total_supervised_points)))
+
+    # A fixed labelled subset is selected once per run. Each epoch then shuffles
+    # and traverses this same subset, so supervised_ratio has its manuscript meaning.
+    generator = torch.Generator().manual_seed(int(args.seed))
+    subset_idx = torch.randperm(total_supervised_points, generator=generator)[:retained_points]
+    x_random = all_supervised[subset_idx].clone()
 
     lb = feature_mat[1, 0:3].numpy()
     ub = feature_mat[0, 0:3].numpy()
-
     eqa_points = generate_eqp_rect(
         lb,
         ub,
@@ -639,11 +711,16 @@ def prepare_training_data(args):
         points=args.n_equation_points,
     )
 
-    return x_random, eqa_points
+    return x_random, eqa_points, total_supervised_points
 
 
 def main():
     args = parse_args()
+
+    if args.method == "all" and (args.dropout_rate is not None or args.checkpoint or args.run_name):
+        raise ValueError(
+            "--dropout-rate, --checkpoint and --run-name require a single --method"
+        )
 
     device = get_device()
     set_seed(args.seed)
@@ -651,21 +728,23 @@ def main():
     print("=" * 80)
     print("benchmark_train.py")
     print(f"Using device: {device}")
-    print(f"Data path: {DATA_PATH}")
+    print(f"Data path: {args.data_path}")
     print(f"Reynolds number: {REYNOLDS}")
     print(f"Selected method: {args.method}")
     print(f"Epochs: {args.epochs}")
     print(f"Equation points: {args.n_equation_points}")
-    print(f"Sampling ratio: {args.ratio}")
+    print(f"Supervised sampling ratio: {args.supervised_ratio}")
+    print(f"Mini-batch fraction: {args.batch_fraction}")
     print(f"Learning rate: {args.learning_rate}")
     print(f"Data loss weight: {args.data_loss_weight}")
     print(f"Equation loss weight: {args.equation_loss_weight}")
     print("=" * 80)
 
-    x_random, eqa_points = prepare_training_data(args)
+    x_random, eqa_points, total_supervised_points = prepare_training_data(args)
+    print(f"Retained supervised points: {x_random.shape[0]} / {total_supervised_points}")
 
     if args.method == "all":
-        selected_methods = list(METHODS.keys())
+        selected_methods = list(ACTIVE_METHODS)
     else:
         selected_methods = [args.method]
 
