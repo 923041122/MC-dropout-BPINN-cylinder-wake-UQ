@@ -19,7 +19,7 @@ from benchmark_config import (
     RESULT_ROOT,
 )
 from benchmark_tools import build_model, count_parameters, get_device, set_seed
-from learning_schdule import ChainedScheduler
+from learning_schedule import ChainedScheduler
 from pinn_model import (
     generate_eqp_rect,
     print_field_statistics,
