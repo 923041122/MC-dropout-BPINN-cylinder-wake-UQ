@@ -1,277 +1,171 @@
-# MC-dropout B-PINN for Physics-Constrained Flow Reconstruction and Uncertainty Quantification
+# MC-dropout B-PINN for Physics-Constrained Flow Reconstruction and UQ
 
-This repository contains the code and processed validation data used in the manuscript:
+This repository accompanies the revised manuscript:
 
 **Uncertainty Quantification for Physics-Constrained Reconstruction of a High-Reynolds-Number Cylinder Wake Using an MC-Dropout Physics-Informed Neural Network**
 
-The repository provides implementations for physics-constrained flow-field reconstruction and uncertainty quantification using an MC-dropout Bayesian physics-informed neural network (MC-dropout B-PINN). Two separated-flow cases are considered:
+The implementation is a physics-constrained reconstruction framework. The cylinder reference fields originate from a k-omega SST CFD dataset, but the PINN loss contains only the dimensionless two-dimensional incompressible momentum residuals as soft regularization; it does **not** contain the k or omega transport equations, SST blending functions, eddy-viscosity closure, or modeled Reynolds stresses.
 
-1. A two-dimensional high-Reynolds-number cylinder wake at $Re = 3900$
-2. A two-dimensional NASA wall-mounted hump separated-flow case
+## Formal manuscript settings
 
-The code includes deterministic PINN baselines, MC-dropout uncertainty estimation, calibration analysis, error evaluation, and plotting scripts.
+### Cylinder wake
 
----
+- Input/output: `(x, y, t) -> (psi, p)`; `u = dpsi/dy`, `v = -dpsi/dx`
+- Network: 10 hidden layers, 100 neurons per layer, Tanh
+- Network trainable parameters: 91,502
+- Adam initial learning rate: 0.001
+- Epochs: 2,000
+- Fixed supervised sampling ratio: 0.02
+- Collocation points: 100,000
+- Data/physics loss weights: 10 / 1
+- Main MC-dropout training rate: 0.002
+- Main uncertainty evaluation: 50 stochastic forward passes
+- Weight decay baseline coefficient: 1e-5
+
+The `supervised_ratio` selects a fixed 2% labelled subset once per run. `batch_fraction` is a separate memory-management parameter and does not change the labelled-data fraction.
+
+### NASA 2D wall-mounted hump
+
+- Same 10 x 100 network (91,502 network parameters)
+- Epochs: 2,000
+- Supervised LES velocity points: all 4,761 points (`supervised_ratio=1.0`)
+- Momentum-residual collocation points: 10,000
+- LES wall-Cp points: 428
+- Velocity / physics / Cp loss weights: 10 / 1e-5 / 1
+- Reynolds number: 935,892
+- Pressure conversion: `Cp = 2p`
+- MC-dropout training rate / inference samples: 0.002 / 50
+- No fitted constant Cp offset is used by default
 
 ## Repository structure
 
 ```text
-MC-dropout-BPINN-cylinder-wake-UQ/
-├── README.md
-├── requirements.txt
-├── LICENSE
-├── cylinder_wake/
-│   ├── bayesian_uncertainty_plot.py
-│   ├── benchmark_config.py
-│   ├── benchmark_evaluate.py
-│   ├── benchmark_tools.py
-│   ├── benchmark_train.py
-│   ├── learning_schedule.py
-│   ├── pinn_model.py
-│   ├── plot_dimensionless.py
-│   ├── read_data.py
-│   ├── train_uv_modify.py
-│   └── uncertainty_ablation.py
-└── nasa_hump/
-    ├── benchmark_tools.py
-    ├── hump_train.py
-    ├── hump_validation.py
-    ├── LES_cp_nasahump2009.dat
-    ├── LES_meanfield_nasahump2009_tec.dat
-    ├── LES_statistics_profiles_nasahump2009.dat
-    ├── noflow_cf_exp.dat
-    ├── noflow_cp_exp.dat
-    └── noflow_vel_and_turb_exp.dat
+cylinder_wake/
+  benchmark_config.py
+  benchmark_train.py
+  train_dropout_ablation.py
+  benchmark_evaluate.py
+  uncertainty_ablation.py
+  wake_probe_spectrum.py
+  benchmark_tools.py
+  pinn_model.py
+  bayesian_uncertainty_plot.py       # compatibility wrapper
+  plot_dimensionless.py              # compatibility wrapper
+  train_uv_modify.py                 # compatibility wrapper
+nasa_hump/
+  hump_train.py
+  hump_validation.py
+  benchmark_tools.py
+  *.dat
+verify_manuscript_config.py
 ```
-
----
-
-## Main components
-
-### 1. Cylinder-wake case
-
-The `cylinder_wake/` folder contains the implementation for the two-dimensional cylinder-wake reconstruction case at $Re = 3900$.
-
-The cylinder-wake reference data used in this study were obtained from the publicly available GitHub repository:
-
-https://github.com/Shengfeng233/PINN-for-turbulence
-
-The original repository provides the two-dimensional circular-cylinder wake dataset calculated using a $k$-$\omega$ SST model at $Re = 3900$. Users should obtain the original cylinder-wake data from the source repository and cite the original repository and associated references when using the data.
-
-Due to redistribution and attribution considerations, the original cylinder-wake `.mat` data file is not redistributed in this repository. The present repository provides the scripts used for physics-constrained reconstruction, uncertainty estimation, calibration analysis, and post-processing.
-
-Main files:
-
-* `pinn_model.py`
-  Defines the neural-network architecture and PINN model.
-
-* `benchmark_config.py`
-  Provides configuration settings for model training and evaluation.
-
-* `benchmark_train.py`
-  Trains deterministic PINN baselines.
-
-* `train_uv_modify.py`
-  Training script used for velocity and pressure reconstruction.
-
-* `benchmark_evaluate.py`
-  Computes reconstruction errors and benchmark metrics.
-
-* `bayesian_uncertainty_plot.py`
-  Generates MC-dropout uncertainty maps and related plots.
-
-* `uncertainty_ablation.py`
-  Performs uncertainty-related ablation analysis.
-
-* `plot_dimensionless.py`
-  Generates dimensionless flow-field and error plots.
-
-* `read_data.py`
-  Reads and preprocesses the cylinder-wake reference data.
-
-* `learning_schedule.py`
-  Defines the learning-rate schedule used during training.
-
-* `benchmark_tools.py`
-  Provides auxiliary functions for training, evaluation, and post-processing.
-
----
-
-### 2. NASA wall-mounted hump case
-
-The `nasa_hump/` folder contains the implementation and processed reference data for the two-dimensional NASA wall-mounted hump separated-flow case.
-
-The NASA wall-mounted hump validation data were obtained from the NASA Turbulence Modeling Resource:
-
-https://tmbwg.github.io/turbmodels/nasahump_val.html
-
-Users should cite the NASA Turbulence Modeling Resource and the associated experimental references when using these data.
-
-Main files:
-
-* `hump_train.py`
-  Trains the PINN models for the wall-mounted hump case.
-
-* `hump_validation.py`
-  Evaluates wall-pressure coefficient and velocity-profile predictions.
-
-* `benchmark_tools.py`
-  Provides auxiliary functions for the hump-case evaluation.
-
-Reference data files:
-
-* `LES_cp_nasahump2009.dat`
-* `LES_meanfield_nasahump2009_tec.dat`
-* `LES_statistics_profiles_nasahump2009.dat`
-* `noflow_cf_exp.dat`
-* `noflow_cp_exp.dat`
-* `noflow_vel_and_turb_exp.dat`
-
-These files contain processed LES and experimental reference data used for wall-pressure and velocity-profile validation.
-
----
-
-## Models included
-
-The repository includes the following PINN variants:
-
-* Standard PINN
-* Weight Decay PINN
-* Adaptive-weight PINN
-* MC-dropout B-PINN
-
-The MC-dropout B-PINN uses dropout-based stochastic forward passes during inference to estimate conditional predictive uncertainty.
-
----
-
-## Requirements
-
-The code was developed in Python. The main required packages are:
-
-```text
-numpy
-scipy
-matplotlib
-pandas
-torch
-scikit-learn
-tqdm
-```
-
-Install the required packages with:
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Usage
-
-Example commands for the cylinder-wake case:
-
-```bash
-python cylinder_wake/benchmark_train.py
-python cylinder_wake/benchmark_evaluate.py
-python cylinder_wake/bayesian_uncertainty_plot.py
-python cylinder_wake/uncertainty_ablation.py
-```
-
-Example commands for the NASA wall-mounted hump case:
-
-```bash
-python nasa_hump/hump_train.py
-python nasa_hump/hump_validation.py
-```
-
-Depending on the local environment, file paths in the scripts may need to be adjusted to match the repository directory structure.
-
-For the cylinder-wake case, users should first obtain the original `.mat` data file from:
-
-https://github.com/Shengfeng233/PINN-for-turbulence
-
-and place it in the local data path expected by the corresponding scripts.
-
----
 
 ## Data
 
-### Cylinder-wake data
-
-The cylinder-wake reference data are not redistributed in this repository. The data were obtained from the following publicly available source repository:
+Obtain the cylinder dataset `2d_cylinder_Re3900_100x100_kw_sst.mat` from the original public source and place it in the repository root (or pass `--data-path`):
 
 https://github.com/Shengfeng233/PINN-for-turbulence
 
-Users should obtain the data from the original source and cite the original repository and associated references.
+NASA hump files remain in `nasa_hump/` with these exact names:
 
-### NASA wall-mounted hump data
+- `LES_cp_nasahump2009.dat`
+- `LES_meanfield_nasahump2009_tec.dat`
+- `LES_statistics_profiles_nasahump2009.dat`
+- `noflow_cf_exp.dat`
+- `noflow_cp_exp.dat`
+- `noflow_vel_and_turb_exp.dat`
 
-The processed LES and experimental reference data for the NASA wall-mounted hump case are provided in the `nasa_hump/` folder.
+## Reproduce the cylinder results
 
-The original validation data source is the NASA Turbulence Modeling Resource:
+Train the four formal methods only:
 
-https://tmbwg.github.io/turbmodels/nasahump_val.html
-
-These data are used for wall-pressure coefficient comparison and velocity-profile validation.
-
----
-
-## Notes on uncertainty interpretation
-
-The MC-dropout uncertainty reported by this code should be interpreted as a conditional reconstruction-reliability indicator associated with the trained neural-network model, available reference data, training procedure, and dropout approximation.
-
-It should not be interpreted as a complete representation of all physical uncertainty sources in the turbulent flow.
-
----
-
-## Reproducibility
-
-The main training settings follow those reported in the manuscript, including:
-
-* Network size: 10 hidden layers with 100 neurons per layer
-* Activation function: hyperbolic tangent
-* Optimizer: Adam
-* Data-loss weight: $\lambda_d = 10$
-* Physics-loss weight: $\lambda_f = 1$
-* Dropout rate for MC-dropout B-PINN: 0.002
-* Number of Monte Carlo samples for uncertainty evaluation: 50
-
-The same network size is used for the deterministic PINN baselines and the MC-dropout B-PINN.
-
----
-
-## Data availability statement
-
-The implementation used for the MC-dropout B-PINN, deterministic PINN baselines, uncertainty-calibration metrics, and plotting scripts is publicly available in this repository.
-
-The cylinder-wake reference data were obtained from the publicly available GitHub repository:
-
-https://github.com/Shengfeng233/PINN-for-turbulence
-
-Due to redistribution and attribution considerations, the original cylinder-wake `.mat` data file is not redistributed in this repository and should be accessed from the original source.
-
-The NASA wall-mounted hump validation data were obtained from the NASA Turbulence Modeling Resource:
-
-https://tmbwg.github.io/turbmodels/nasahump_val.html
-
-The processed NASA wall-mounted hump data used for validation are provided in the `nasa_hump/` folder.
-
----
-
-## Citation
-
-If you use this code or data, please cite the associated manuscript:
-
-```text
-Zhu, L. and Zhang, X.,
-Uncertainty Quantification for Physics-Constrained Reconstruction of a High-Reynolds-Number Cylinder Wake Using an MC-Dropout Physics-Informed Neural Network.
+```bash
+python cylinder_wake/benchmark_train.py --method all \
+  --data-path ./2d_cylinder_Re3900_100x100_kw_sst.mat \
+  --epochs 2000 --supervised-ratio 0.02 --batch-fraction 0.02 \
+  --n-equation-points 100000 --data-loss-weight 10 \
+  --equation-loss-weight 1 --seed 2025
 ```
 
-Please also cite the original data sources when using the cylinder-wake dataset or the NASA wall-mounted hump validation data.
+`--method all` uses only Standard PINN, Weight Decay PINN, Adaptive-weight PINN, and MC-dropout B-PINN. The experimental Fourier-feature entry is not included in the formal run.
 
----
+Generate global/local errors, pointwise absolute-error maps, uncertainty maps, calibration curves, and Tables 2-4 CSV outputs:
 
-## License
+```bash
+python cylinder_wake/benchmark_evaluate.py \
+  --data-path ./2d_cylinder_Re3900_100x100_kw_sst.mat \
+  --mc-samples 50
+```
 
-This repository is released under the MIT License.
+Generate the wake-probe signal and FFT at `(x,y)=(1.500,0.000)`:
 
+```bash
+python cylinder_wake/wake_probe_spectrum.py \
+  --data-path ./2d_cylinder_Re3900_100x100_kw_sst.mat \
+  --mc-samples 50
+```
+
+### Formal retraining-based dropout ablation
+
+First independently train one checkpoint for every dropout rate:
+
+```bash
+python cylinder_wake/train_dropout_ablation.py \
+  --data-path ./2d_cylinder_Re3900_100x100_kw_sst.mat \
+  --dropout-rates 0.002 0.005 0.010 0.020 0.050 \
+  --epochs 2000 --supervised-ratio 0.02 --batch-fraction 0.02 \
+  --n-equation-points 100000 --data-loss-weight 10 \
+  --equation-loss-weight 1 --seed 2025
+```
+
+Then evaluate each rate-specific checkpoint at 5, 10, 20, 30, 50, and 100 MC samples:
+
+```bash
+python cylinder_wake/uncertainty_ablation.py \
+  --data-path ./2d_cylinder_Re3900_100x100_kw_sst.mat \
+  --checkpoint-dir benchmark_results/models/dropout_ablation \
+  --dropout-rates 0.002 0.005 0.010 0.020 0.050 \
+  --mc-samples 5 10 20 30 50 100 --seed 2025
+```
+
+`uncertainty_ablation.py` now fails if any rate-specific checkpoint is missing. It never substitutes a new inference probability into one shared checkpoint.
+
+## Reproduce the NASA hump results
+
+```bash
+python nasa_hump/hump_train.py --method all \
+  --data-dir nasa_hump --epochs 2000 --supervised-ratio 1.0 \
+  --n-equation-points 10000 --data-loss-weight 10 \
+  --equation-loss-weight 1e-5 --cp-loss-weight 1 \
+  --cp-source les --cp-scale 2.0 --seed 2025
+```
+
+```bash
+python nasa_hump/hump_validation.py \
+  --data-dir nasa_hump --mc-samples 50 \
+  --pressure-to-cp-scale 2.0 --require-models
+```
+
+For the manuscript's post-training hump inference-sensitivity analysis:
+
+```bash
+python nasa_hump/hump_validation.py \
+  --data-dir nasa_hump --mc-samples 50 --pressure-to-cp-scale 2.0 \
+  --require-models --run-ablation \
+  --ablation-dropout-rates 0.001 0.002 0.005 0.010 \
+  --ablation-mc-samples 10 20 30 50
+```
+
+This hump analysis intentionally uses the same checkpoint trained at dropout 0.002 and changes dropout probability only during stochastic inference; it is therefore an inference-sensitivity analysis, not a retraining-based ablation.
+
+## Integrity check
+
+```bash
+python verify_manuscript_config.py
+```
+
+The script checks the published architecture count and all key default settings. Numerical tables must still be regenerated from the newly trained checkpoints; code alignment alone does not validate previously reported numerical values.
+
+## Parameter-count reporting
+
+All four methods use the same 91,502-parameter neural network. The adaptive-weight baseline additionally optimizes two scalar loss-weight variables for the cylinder case and three for the hump case. For complete transparency, output tables should distinguish **network parameters** from **additional adaptive loss parameters** and **total optimized parameters**.
