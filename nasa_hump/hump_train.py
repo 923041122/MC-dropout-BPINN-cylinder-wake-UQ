@@ -19,7 +19,7 @@ Network form is kept consistent with your cylinder-flow scripts:
 NASA hump data used by this trainer:
     LES_meanfield_nasahump2009_tec.dat     -> supervised u, v mean field
     LES_cp_nasahump2009.dat                -> optional wall Cp supervision for p
-    noflow_cp_exp.dat                      -> optional experimental wall Cp supervision
+    noflow_cp.exp.dat                      -> optional experimental wall Cp supervision
 
 Default output:
     ./hump_results/models/standard_pinn.pth
@@ -357,7 +357,7 @@ def build_cp_supervision(
             frames.append(tmp)
 
     if cp_source in {"exp", "both"}:
-        path = data_dir / "noflow_cp_exp.dat"
+        path = data_dir / "noflow_cp.exp.dat"
 
         if path.exists():
             tmp = read_cp_file(path)

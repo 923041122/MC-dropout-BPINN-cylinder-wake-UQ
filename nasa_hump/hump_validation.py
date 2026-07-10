@@ -24,9 +24,9 @@ Expected data files by default:
     ./nasa_hump/LES_meanfield_nasahump2009_tec.dat
     ./nasa_hump/LES_statistics_profiles_nasahump2009.dat
     ./nasa_hump/LES_cp_nasahump2009.dat
-    ./nasa_hump/noflow_cp_exp.dat
-    ./nasa_hump/noflow_cf_exp.dat
-    ./nasa_hump/noflow_vel_and_turb_exp.dat
+    ./nasa_hump/noflow_cp.exp.dat
+    ./nasa_hump/noflow_cf.exp.dat
+    ./nasa_hump/noflow_vel_and_turb.exp.dat
 
 Expected model checkpoints by default:
     ./hump_results/models/standard_pinn.pth
@@ -154,9 +154,9 @@ def read_numeric_rows(path: Path, min_cols: int = 1) -> pd.DataFrame:
     """Read loose Tecplot-like ASCII files by keeping only numeric rows.
 
     This works for files such as:
-        noflow_cp_exp.dat
-        noflow_cf_exp.dat
-        noflow_vel_and_turb_exp.dat
+        noflow_cp.exp.dat
+        noflow_cf.exp.dat
+        noflow_vel_and_turb.exp.dat
         LES_cp_nasahump2009.dat
     """
     rows: List[List[float]] = []
@@ -374,7 +374,7 @@ def read_les_profiles(path: Path) -> pd.DataFrame:
 
 
 def read_exp_profiles(path: Path) -> pd.DataFrame:
-    """Read noflow_vel_and_turb_exp.dat.
+    """Read noflow_vel_and_turb.exp.dat.
 
     Output columns:
         x, y, u, v, uu, vv, uv
@@ -402,9 +402,9 @@ def load_hump_data(data_dir: Path) -> Dict[str, object]:
         "meanfield": read_les_meanfield_tec(data_dir / "LES_meanfield_nasahump2009_tec.dat"),
         "les_profiles": read_les_profiles(data_dir / "LES_statistics_profiles_nasahump2009.dat"),
         "les_cp": read_cp_file(data_dir / "LES_cp_nasahump2009.dat"),
-        "exp_cp": read_cp_file(data_dir / "noflow_cp_exp.dat"),
-        "exp_cf": read_cf_exp(data_dir / "noflow_cf_exp.dat"),
-        "exp_profiles": read_exp_profiles(data_dir / "noflow_vel_and_turb_exp.dat"),
+        "exp_cp": read_cp_file(data_dir / "noflow_cp.exp.dat"),
+        "exp_cf": read_cf_exp(data_dir / "noflow_cf.exp.dat"),
+        "exp_profiles": read_exp_profiles(data_dir / "noflow_vel_and_turb.exp.dat"),
     }
     return data
 
